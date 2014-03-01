@@ -30,8 +30,9 @@ public class Analyzer {
 
             int count = 0;
             BigInteger sum = BigInteger.valueOf(0);
+            BigInteger nano = BigInteger.valueOf(100000000);
 
-            Sha256Hash blockHashToGet = new Sha256Hash("0000000099c744455f58e6c6e98b671e1bf7f37346bfd4cf5d0274ad8ee660cb");
+            Sha256Hash blockHashToGet = new Sha256Hash("000000000000034a7dedef4a161fa058a2d67a173a90155f3a2fe6fc132e0ebf");
             while (blockHashToGet != null) {
                 Future<Block> future = peer.getBlock(blockHashToGet);
                 Block block = future.get();
@@ -39,7 +40,7 @@ public class Analyzer {
                 for (Transaction t : block.getTransactions()) {
                     for(TransactionOutput o : t.getOutputs()) {
                         sum = sum.add(o.getValue());
-                        System.out.println("Value of a transaction is " + o.getValue());
+//                        System.out.println("Value of a transaction is " + o.getValue());
                     }
                 }
 
@@ -48,7 +49,7 @@ public class Analyzer {
                 count++;
 
 //                if(count % 1 == 0) {
-                    System.out.println("Processing " + count + " transaction, total amount is " + sum);
+                    System.out.println("Processing " + count + " transaction, total amount is " + sum.divide(nano) + " BTC.");
 //                }
             }
 
