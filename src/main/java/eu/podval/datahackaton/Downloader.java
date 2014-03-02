@@ -11,6 +11,9 @@ import redis.clients.jedis.Jedis;
 import java.io.IOException;
 import java.net.URL;
 
+/**
+ * java -cp ".;.\dependency\*;.\FlightRadarAnalyzer-1.0-SNAPSHOT.jar" eu.podval.datahackaton.Downloader 3
+ */
 public class Downloader {
     private static final Log logger = LogFactory.getLog(Downloader.class);
     public static final String FlightRadarUrl = "http://www.flightradar24.com/zones/full_all.json";
@@ -19,7 +22,7 @@ public class Downloader {
         Validate.isTrue(args.length == 1, "You must supply at least count of downloads.");
 
         JsonFactory factory = new JsonFactory();
-        Jedis jedis = null;//new Jedis("mpaphsv100.hpswlabs.adapps.hp.com");
+        Jedis jedis = new Jedis("mpaphsv100.hpswlabs.adapps.hp.com");
         int downloadsCount = Integer.parseInt(args[0]);
 
         try {

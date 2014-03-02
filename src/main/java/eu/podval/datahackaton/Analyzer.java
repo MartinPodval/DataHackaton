@@ -7,6 +7,9 @@ import redis.clients.jedis.Jedis;
 import java.math.BigInteger;
 import java.util.Set;
 
+/**
+ * java -cp ".;.\dependency\*;.\FlightRadarAnalyzer-1.0-SNAPSHOT.jar" eu.podval.datahackaton.Analyzer
+ */
 public class Analyzer {
     private static final Log logger = LogFactory.getLog(Analyzer.class);
 
