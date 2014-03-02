@@ -1,78 +1,99 @@
 package eu.podval.datahackaton;
 
-import com.google.bitcoin.core.*;
-import com.google.bitcoin.params.MainNetParams;
-import com.google.bitcoin.store.BlockStore;
-import com.google.bitcoin.store.MemoryBlockStore;
+import org.apache.commons.lang3.Validate;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.JsonParser;
+import org.codehaus.jackson.JsonToken;
+import redis.clients.jedis.Jedis;
 
-import java.math.BigInteger;
-import java.net.InetAddress;
-import java.util.List;
-import java.util.concurrent.Future;
+import java.io.IOException;
+import java.net.URL;
 
 public class Analyzer {
     private static final Log logger = LogFactory.getLog(Analyzer.class);
+    public static final String FlightRadarUrl = "http://www.flightradar24.com/zones/full_all.json";
 
     public static void main(String[] args) {
-        final NetworkParameters params = MainNetParams.get();
-        PeerGroup peerGroup = null;
+        Validate.isTrue(args.length == 1, "You must supply at least count of downloads.");
+
+        JsonFactory factory = new JsonFactory();
+        Jedis jedis = null;//new Jedis("mpaphsv100.hpswlabs.adapps.hp.com");
+        int downloadsCount = Integer.parseInt(args[0]);
+
         try {
-            BlockStore blockStore = new MemoryBlockStore(params);
-            BlockChain chain = new BlockChain(params, blockStore);
-            peerGroup = new PeerGroup(params, chain);
-            peerGroup.startAndWait();
-            PeerAddress addr = new PeerAddress(InetAddress.getLocalHost(), params.getPort());
-            peerGroup.addAddress(addr);
-            peerGroup.waitForPeers(1).get();
-            Peer peer = peerGroup.getConnectedPeers().get(0);
-
-            int count = 0;
-            BigInteger sum = BigInteger.valueOf(0);
-            BigInteger nano = BigInteger.valueOf(100000000);
-
-            Sha256Hash blockHashToGet = new Sha256Hash("000000000000034a7dedef4a161fa058a2d67a173a90155f3a2fe6fc132e0ebf");
-            while (blockHashToGet != null) {
-                Future<Block> future = peer.getBlock(blockHashToGet);
-                Block block = future.get();
-
-                for (Transaction t : block.getTransactions()) {
-                    for(TransactionOutput o : t.getOutputs()) {
-                        sum = sum.add(o.getValue());
-//                        System.out.println("Value of a transaction is " + o.getValue());
-                    }
+            for (int i = 0; i < downloadsCount; i++) {
+                logger.error("Starting to parse a json, attempt: " + i);
+                parseAndPutToRedis(factory, jedis);
+                try {
+                    Thread.sleep(8000);
+                } catch (InterruptedException e) {
+                    logger.error("Thread was interrupted.", e);
                 }
-
-                // Get previous
-                blockHashToGet = block.getPrevBlockHash();
-                count++;
-
-//                if(count % 1 == 0) {
-                    System.out.println("Processing " + count + " transaction, total amount is " + sum.divide(nano) + " BTC.");
-//                }
             }
-
-                           /*
-            Sha256Hash blockHash = new Sha256Hash("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
-            Future<Block> future = peer.getBlock(blockHash);
-            Block block = future.get();
-            block.getPrevBlockHash()
-
-            for (Transaction tx : block.getTransactions()) {
-                System.out.print("TX ==> " + tx);
-                for (TransactionInput i : tx.getInputs()) {
-                    System.out.print("Input ==> " + i);
-                    System.out.print("Value ==> " + i.);
-                }
-                for (TransactionOutput o : tx.getOutputs()) {
-                    System.out.print("OutputValue ==> " + o.getValue());
-                }
-            }                */
-        } catch (Exception e) {
-            logger.error("Processing failed.", e);
         } finally {
-            peerGroup.stop();
+            if (jedis != null) {
+                jedis.quit();
+            }
         }
+    }
+
+    private static void parseAndPutToRedis(JsonFactory factory, Jedis jedis) {
+        int planeCount = 0;
+        try {
+//            JsonParser parser = factory.createJsonParser(new File("c:\\Data\\Downloads\\full_all.json"));
+            JsonParser parser = factory.createJsonParser(new URL(FlightRadarUrl));
+            parser.nextToken();
+
+            while (parser.nextToken() != JsonToken.END_OBJECT) {
+
+                String planeNumber = parser.getText();
+                logger.error("Processing plane: " + planeNumber);
+
+                if (parser.nextToken() == JsonToken.START_ARRAY) {
+                    parser.nextToken();
+                    String hex = parser.getText();
+
+                    parser.nextToken();
+                    float lat = parser.getFloatValue();
+
+                    parser.nextToken();
+                    float lng = parser.getFloatValue();
+
+                    parser.nextToken();
+                    int aircraftTrack = parser.getIntValue();
+
+                    parser.nextToken();
+                    int altitude = parser.getIntValue();
+
+                    parser.nextToken();
+                    int speed = parser.getIntValue();
+
+                    putToRedis(jedis, planeNumber, lat, lng, aircraftTrack, altitude, speed);
+                    planeCount++;
+
+                    while (parser.nextToken() != JsonToken.END_ARRAY) {
+                        // Skip the rest of all items
+                    }
+                } else {
+                    logger.error("Other property: " + parser.getText());
+                }
+            }
+        } catch (IOException e) {
+            logger.error("Can't process a json.", e);
+        }
+        logger.error(planeCount + " planes were inserted.");
+    }
+
+    private static void putToRedis(Jedis jedis, String planeNumber, float lat, float lng, int aircraftTrack, int altitude, int speed) {
+        Long occurrence = jedis.incr("cnt:" + planeNumber);
+        jedis.set("plane:" + planeNumber + ":lat:" + occurrence, Float.toString(lat));
+        jedis.set("plane:" + planeNumber + ":lng:" + occurrence, Float.toString(lng));
+        jedis.set("plane:" + planeNumber + ":track:" + occurrence, Integer.toString(aircraftTrack));
+        jedis.set("plane:" + planeNumber + ":alt:" + occurrence, Integer.toString(altitude));
+        jedis.set("plane:" + planeNumber + ":speed:" + occurrence, Integer.toString(speed));
+
+        jedis.sadd("planes", planeNumber);
     }
 }
